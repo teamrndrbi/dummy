@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 Dashboard </title>
+  <style>
+    /* --- CSS SYSTEM (NO SCROLL LAYOUT) --- */
+    html, body { 
+        height: 100%; margin: 0; padding: 0; 
+        font-family: 'Segoe UI', sans-serif; 
+        background:#10131a; color:#e5e5e5; 
+        overflow: hidden; /* HILANGKAN SCROLL HALAMAN */
+    }
+
+    /* Flex Container Utama */
+    body { display: flex; flex-direction: column; }
+
+    h1 { 
+        text-align:center; padding: 10px 0; margin: 0; 
+        font-size: 20px; color:#fff; flex-shrink: 0; 
+        background: #10131a; z-index: 10;
+    }
+
+    .container { 
+        flex-grow: 1; /* Mengisi sisa tinggi layar */
+        width: 100%; max-width: 1400px; margin: auto; 
+        padding: 5px 15px 15px 15px; 
+        box-sizing: border-box;
+        display: flex; flex-direction: column;
+        height: 100%; /* Pastikan container full height */
+    }
+
+    /* CARD STYLING */
+    .card { 
+        background:#1a1f27; padding:12px; border-radius:10px; 
+        border: 1px solid #2d333c; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
+        display: flex; flex-direction: column;
+    }
+
+    h3 { margin: 0 0 10px 0; font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 5px; color:#fff; }
+    h4 { margin: 0 0 3px 0; font-size: 12px; color: #9ca3af; }
+
+    /* LAYOUT ROW & COL */
+    .row { 
+        display: flex; gap: 15px; 
+        flex-grow: 1; /* Row mengisi sisa ruang di bawah dropdown */
+        height: 0; /* Trik agar child bisa scroll/fit */
+    }
+    
+    .col-left { 
+        flex: 2; /* Kolom Kiri lebih lebar (Monitor) */
+        display: flex; flex-direction: column; 
+        height: 100%; 
+    }
+    .col-right { 
+        flex: 1; /* Kolom Kanan lebih kecil */
+        min-width: 320px; max-width: 400px;
+        display: flex; flex-direction: column; gap: 10px;
+        height: 100%;
+    }
+
+    /* --- MONITOR IMAGE (AUTO RESIZE) --- */
+    .monitor-card { flex-grow: 1; height: 100%; } /* Card mengisi penuh kiri */
+    
+    .preview-wrapper {
+        flex-grow: 1; 
+        position: relative; 
+        background: #000; border-radius: 6px; border: 2px solid #2d333c;
+        display: flex; align-items: center; justify-content: center;
+        overflow: hidden;
+        margin-bottom: 10px;
+    }
+    
+    /* Gambar dipaksa fit container tanpa mengubah rasio */
+    img.preview { 
+        max-width: 100%; max-height: 100%; 
+        width: auto; height: auto; 
+        object-fit: contain; 
+    }
+
+    /* --- INPUTS & CONTROLS --- */
+    select, input { width:100%; padding:6px; background:#0d1117; color:#fff; border:1px solid #444; border-radius:4px; box-sizing: border-box; font-size: 13px; }
+    .btn { width:100%; padding:8px; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:13px; color:#fff; background:#3b82f6; transition:0.2s; }
+    .btn:hover { background:#2563eb; }
+    .btn-danger { background:#ef4444; } .btn-danger:hover { background:#dc2626; }
+    .btn-green { background:#10b981; } .btn-green:hover { background:#059669; }
+
+    /* GRID UNTUK SETTING (HEMAT TEMPAT) */
+    .setting-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+    
+    /* STATUS INDICATOR */
+    .status-indicator { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
+    .status { font-weight:bold; padding: 2px 6px; border-radius: 4px; }
+    .online { color:#22c55e; background: rgba(34, 197, 94, 0.1); }
+    .offline { color:#ef4444; background: rgba(239, 68, 68, 0.1); }
+
+    /* --- STATS GRID --- */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: center; }
+    .stat-item { background: #0d1117; padding: 8px; border-radius: 4px; border: 1px solid #333; }
+    .stat-val { font-size: 14px; font-weight: bold; display: block; color: #fff; }
+    .stat-label { font-size: 10px; color: #888; }
+
+    /* --- TIME BADGES --- */
+    .time-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; padding: 5px 8px; background: #0d1117; border-radius: 4px; border: 1px solid #2a2a2a; font-size: 11px; }
+    .time-label { color: #9ca3af; white-space: nowrap; }
+    .time-val { font-weight: bold; letter-spacing: 0.3px; }
+    .time-val.online-clr { color: #22c55e; }
+    .time-val.offline-clr { color: #ef4444; }
+
+    /* --- MODAL (POPUP) --- */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.95); backdrop-filter:blur(3px); z-index: 2000; }
+    
+    /* PERBAIKAN: Live Modal harus lebih tinggi z-index-nya dibanding Gallery */
+    #liveModal { z-index: 2010 !important; }
+
+    .modalBox { 
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+        background:#1a1f27; padding:15px; border-radius:10px; border: 1px solid #555;
+        width: 90vw; height: 90vh; display: flex; flex-direction: column; 
+    }
+    .modalHeader { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-shrink:0; }
+    .close-icon { cursor: pointer; color: #fff; background:none; border:none; font-size: 20px; }
+    
+    /* Live View di Modal */
+    #liveImg { width:100%; flex:1; min-height:0; object-fit:contain; background:#000; }
+    .live-info { display:flex; justify-content:space-between; background:#0d1117; margin-top:10px; padding:8px; border-radius:4px; font-size:13px; color:#3b82f6; flex-shrink:0;}
+
+    /* Gallery Grid (Fixed 5 Col) */
+    .gallery-container {
+        display: grid; grid-template-columns: repeat(5, 1fr) !important; 
+        grid-auto-rows: min-content; align-content: start; gap: 15px; 
+        overflow-y: auto; flex: 1; padding: 10px; background: #0d1117; border-radius: 8px;
+    }
+    .gallery-card { background: #161b22; border: 1px solid #333; border-radius: 6px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
+    .gallery-card:hover { transform: translateY(-2px); border-color: #3b82f6; }
+    .gallery-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
+    .gallery-meta { padding: 5px; text-align: center; font-size: 11px; font-weight: bold; color: #ddd; background: #111; }
+    .modal-footer { margin-top: 10px; flex-shrink: 0; }
+    .btn-close-large { width: 100%; padding: 10px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+
+  </style>
+</head>
+<body>
+
+<h1>CCTV Dashboard</h1>
+
+<div class="container">
+
+  <div class="card" style="margin-bottom: 10px; flex-shrink: 0;">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <label style="margin:0; white-space:nowrap;">Pilih Kamera:</label>
+        <select id="camSelect" onchange="onCamChange()" style="flex-grow:1;"></select>
+    </div>
+  </div>
+
+  <div class="row">
+    
+    <div class="col-left">
+        <div class="card monitor-card">
+            <h3>Monitor</h3>
+            
+            <div class="preview-wrapper">
+                <img id="thumb" class="preview" src="" alt="Menunggu sinyal...">
+            </div>
+
+            <div class="status-indicator">
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <span>Status:</span>
+                    <span id="statusBadge" class="status offline">OFFLINE</span>
+                </div>
+                <button class="btn btn-green" onclick="openGalleryModal()" style="width: auto; padding: 4px 15px;">📂 Gallery</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-right">
+        
+        <div class="card" style="flex-shrink: 0;">
+            <h3>Kontrol</h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button class="btn" onclick="openLive()"> Live</button>
+                <button class="btn btn-danger" onclick="stopCam()">⏹ Stop</button>
+            </div>
+
+            <div style="border-top: 1px solid #333; padding-top: 10px;">
+                <div class="setting-grid">
+                    <div><h4>FPS Stream</h4><input id="fpsInput" type="number" min="1" max="25"></div>
+                    <div><h4>Thumb (m)</h4><input id="thumbInput" type="number" step="0.1"></div>
+                    <div><h4>Gallery (m)</h4><input id="galleryInput" type="number" min="1"></div>
+                </div>
+                <button class="btn" onclick="saveSettings()" style="margin-top:10px;">Save Setting</button>
+            </div>
+
+            <div style="margin-top: 10px; border-top: 1px dashed #444; padding-top: 10px;">
+                <h4 style="margin-bottom:5px;">Update Firmware</h4>
+                <div style="display:flex; gap:5px;">
+                    <input type="file" id="fwFile" accept=".bin">
+                    <button class="btn btn-green" onclick="uploadOTA()" style="width: 80px;">Upload</button>
+                </div>
+                <div id="otaStatus" style="font-size:10px; color:#aaa; margin-top:2px;">Format .bin only</div>
+            </div>
+        </div>
+
+        <div class="card" style="flex-grow: 1;"> <h3>Monitoring</h3>
+            <div class="stats-grid">
+                <div class="stat-item"><span id="bwNow" class="stat-val">0</span><span class="stat-label">KB/s</span></div>
+                <div class="stat-item"><span id="bwSession" class="stat-val">0</span><span class="stat-label">MB Session</span></div>
+                <div class="stat-item"><span id="bw24" class="stat-val">0</span><span class="stat-label">MB (24h)</span></div>
+                <div class="stat-item">
+                    <span id="sdInfoText" class="stat-val" style="color:#eab308; font-size:13px;">-</span>
+                    <span class="stat-label">SD Card</span>
+                </div>
+            </div>
+            <div class="time-row">
+                <span class="time-label">🟢 Terakhir Online:</span>
+                <span id="lastOnlineText" class="time-val online-clr">-</span>
+            </div>
+            <div class="time-row">
+                <span class="time-label">🔴 Terakhir Offline:</span>
+                <span id="lastOfflineText" class="time-val offline-clr">-</span>
+            </div>
+        </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div id="liveModal" class="modal-overlay">
+  <div class="modalBox">
+    <div class="modalHeader">
+      <h3 id="modalTitle" style="margin:0; font-size:16px; color:#fff;">Live Stream</h3>
+      <button class="close-icon" onclick="closeLive()">✖</button>
+    </div>
+    <img id="liveImg">
+    <div id="liveInfoBar" class="live-info">
+        <span>Speed: <b id="liveBw" style="color:#22c55e">0</b> KB/s</span>
+        <span>Session: <b id="liveSession" style="color:#eab308">0</b> MB</span>
+    </div>
+  </div>
+</div>
+
+<div id="galleryModal" class="modal-overlay">
+  <div class="modalBox">
+    <div class="modalHeader">
+      <h3 style="margin:0; font-size:16px; color:#fff;">📷 Gallery</h3>
+      <button class="btn" onclick="loadGallery()" style="width:auto; padding:4px 10px;">🔄 Refresh</button>
+    </div>
+    
+    <div id="galleryGrid" class="gallery-container">
+        <div style="color:#888; text-align:center; padding:50px;">Memuat foto...</div>
+    </div>
+
+    <div class="modal-footer">
+        <button class="btn-close-large" onclick="closeGalleryModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- LOGIC JS TETAP SAMA ---
+const camSelect = document.getElementById('camSelect');
+const statusBadge = document.getElementById('statusBadge');
+let currentCam = "";
+let isLiveStreaming = false; 
+
+async function loadCameras() {
+  try {
+    const res = await fetch("/cameras");
+    const cams = await res.json();
+    const savedSelection = camSelect.value;
+    camSelect.innerHTML = ""; 
+    if (cams.length === 0) {
+        const opt = document.createElement("option"); opt.text = "Tidak ada kamera..."; camSelect.appendChild(opt); return;
+    }
+    cams.forEach(c => {
+      const opt = document.createElement("option"); opt.value = c; opt.textContent = c; camSelect.appendChild(opt);
+    });
+    if (savedSelection && cams.includes(savedSelection)) { camSelect.value = savedSelection; } 
+    else if (!currentCam && cams.length > 0) { camSelect.value = cams[0]; onCamChange(); }
+    if (!currentCam && cams.length > 0) { currentCam = cams[0]; onCamChange(); }
+  } catch (e) { console.error("Gagal load camera", e); }
+}
+
+function onCamChange() { currentCam = camSelect.value; refreshThumb(); fetchSettingsToInput(); }
+
+async function fetchSettingsToInput() {
+    if(!currentCam) return;
+    try {
+        const r = await fetch(`/status?cam_id=${currentCam}`);
+        const data = await r.json();
+        document.getElementById('fpsInput').value = data.streamFps || 5;
+        document.getElementById('thumbInput').value = (data.thumbIntervalMs / 60000) || 1;
+        document.getElementById('galleryInput').value = (data.galleryIntervalMs / 60000) || 5;
+    } catch(e){}
+}
+function refreshThumb(){ if(currentCam) document.getElementById('thumb').src = `/thumbnail/${currentCam}?t=`+Date.now(); }
+
+// FORMAT TANGGAL
+function formatTimestamp(filename) {
+    try {
+        const parts = filename.split('-');
+        if(parts.length < 2) return filename; 
+        const tsString = parts[1].split('.')[0];
+        const ts = parseInt(tsString);
+        if(isNaN(ts)) return filename;
+        const d = new Date(ts);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        const hh = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+    } catch(e) { return filename; }
+}
+
+async function loadGallery() {
+    if(!currentCam) return;
+    const grid = document.getElementById('galleryGrid');
+    grid.innerHTML = "<div style='color:#888; text-align:center; padding:50px;'>Mengambil data...</div>";
+    try {
+        const res = await fetch(`/gallery/${currentCam}`);
+        const files = await res.json();
+        grid.innerHTML = "";
+        if(files.length === 0) {
+            grid.innerHTML = "<div style='color:#888; text-align:center; padding:50px;'>Belum ada foto.</div>";
+            return;
+        }
+        files.forEach(f => {
+            const url = `/gallery/${currentCam}/${f}`;
+            const displayDate = formatTimestamp(f);
+            const card = document.createElement("div");
+            card.className = "gallery-card";
+            card.innerHTML = `<img src="${url}" class="gallery-thumb" loading="lazy"><div class="gallery-meta">${displayDate}</div>`;
+            card.onclick = () => openImageModal(url, f);
+            grid.appendChild(card);
+        });
+    } catch(e) { grid.innerHTML = "<div style='color:red; text-align:center;'>Gagal memuat gallery.</div>"; }
+}
+
+async function pollStatusAndBandwidth(){
+  if(!currentCam) return;
+  try{
+    const rBW = await fetch(`/bandwidth/${currentCam}`);
+    const jBW = await rBW.json();
+    document.getElementById('bwNow').innerText = jBW.kbps;
+    document.getElementById('bwSession').innerText = jBW.sessionMB;
+    document.getElementById('bw24').innerText = jBW.total24MB;
+    if (jBW.sd && jBW.sd.totalMB > 0) {
+        document.getElementById('sdInfoText').innerText = `${jBW.sd.freeMB} / ${jBW.sd.totalMB} MB`;
+    } else {
+        document.getElementById('sdInfoText').innerText = "No SD";
+    }
+    if(isLiveStreaming && document.getElementById('liveModal').style.display === 'block'){
+        document.getElementById('liveBw').innerText = jBW.kbps;
+        document.getElementById('liveSession').innerText = jBW.sessionMB;
+    }
+    const rStat = await fetch(`/status?cam_id=${currentCam}`);
+    const dStat = await rStat.json();
+    if(dStat.run) {
+        statusBadge.innerText = "ONLINE"; statusBadge.className = "status online";
+    } else {
+        statusBadge.innerText = "STANDBY"; statusBadge.className = "status offline";
+    }
+    // Tampilkan waktu terakhir online & offline
+    document.getElementById('lastOnlineText').innerText  = dStat.lastOnlineAt  ? formatDateTime(dStat.lastOnlineAt)  : '-';
+    document.getElementById('lastOfflineText').innerText = dStat.lastOfflineAt ? formatDateTime(dStat.lastOfflineAt) : '-';
+  }catch(e){}
+}
+
+// Format timestamp epoch ke tanggal & jam lokal
+function formatDateTime(ts) {
+    try {
+        const d = new Date(ts);
+        const dd  = String(d.getDate()).padStart(2,'0');
+        const mm  = String(d.getMonth()+1).padStart(2,'0');
+        const yyyy = d.getFullYear();
+        const hh  = String(d.getHours()).padStart(2,'0');
+        const min = String(d.getMinutes()).padStart(2,'0');
+        const ss  = String(d.getSeconds()).padStart(2,'0');
+        return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
+    } catch(e) { return '-'; }
+}
+
+async function saveSettings(){
+  if(!currentCam) return;
+  await fetch(`/cam/${currentCam}/setFps`,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({fps: document.getElementById('fpsInput').value}) });
+  await fetch(`/cam/${currentCam}/setThumbInterval`,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ms: document.getElementById('thumbInput').value*60000}) });
+  await fetch(`/cam/${currentCam}/setGalleryInterval`,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ms: document.getElementById('galleryInput').value*60000}) });
+  alert(`Setting tersimpan!`);
+  fetchSettingsToInput();
+}
+
+function openLive(){ 
+    if(!currentCam) return; isLiveStreaming = true; 
+    document.getElementById('modalTitle').innerText = "Live: " + currentCam;
+    document.getElementById('liveImg').src = `/stream/${currentCam}`;
+    document.getElementById('liveInfoBar').style.display = 'flex'; 
+    document.getElementById('liveModal').style.display='block';
+}
+function openImageModal(src, title){ 
+    isLiveStreaming = false; 
+    document.getElementById('modalTitle').innerText = "Foto: " + formatTimestamp(title);
+    document.getElementById('liveImg').src = src;
+    document.getElementById('liveInfoBar').style.display = 'none'; 
+    document.getElementById('liveModal').style.display='block';
+}
+function closeLive(){ document.getElementById('liveImg').src=''; document.getElementById('liveModal').style.display='none'; isLiveStreaming = false; }
+function openGalleryModal() { if(!currentCam) return; loadGallery(); document.getElementById('galleryModal').style.display='block'; }
+function closeGalleryModal() { document.getElementById('galleryModal').style.display='none'; }
+async function stopCam(){ if(!confirm("Stop kamera ini?")) return; await fetch(`/cam/${currentCam}/stop`,{method:'POST'}); }
+
+async function uploadOTA() {
+    const fileInput = document.getElementById('fwFile');
+    const statusDiv = document.getElementById('otaStatus');
+    if (!fileInput.files.length) { alert("Pilih file .bin dulu!"); return; }
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append("firmware", file);
+    statusDiv.innerText = "Mengupload...";
+    try {
+        const res = await fetch("/uploadFirmware", { method: "POST", body: formData });
+        if (res.ok) { statusDiv.innerText = "✅ Upload Sukses!"; alert("Upload Berhasil."); } 
+        else { statusDiv.innerText = "❌ Gagal Upload."; }
+    } catch (e) { statusDiv.innerText = "❌ Error: " + e.message; }
+}
+
+loadCameras();
+setInterval(loadCameras, 10000); 
+setInterval(refreshThumb, 5000); 
+setInterval(pollStatusAndBandwidth, 1000);
+</script>
+</body>
+</html>
