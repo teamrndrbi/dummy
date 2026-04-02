@@ -1,4 +1,4 @@
-// UPDATED SERVER.JS – FINAL + AUTO DELETE OLD GALLERY (7 DAYS)
+// UPDATED SERVER.JS – FINAL + AUTO DELETE OLD GALLERY (7 HARI)
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
